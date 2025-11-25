@@ -1,4 +1,4 @@
 datasets/
 fiftyone_env/
 runs/
-yolo11s.pt
+models/

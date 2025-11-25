@@ -8,8 +8,6 @@ from ultralytics import YOLO
 # ==========================================
 # 1. CONFIGURATION
 # ==========================================
-
-# FULL COCO LIST (Required to make indices 24 and 56 valid)
 COCO_80_CLASSES = [
     "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light",
     "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow",
@@ -22,158 +20,163 @@ COCO_80_CLASSES = [
     "hair drier", "toothbrush"
 ]
 
-# SUBSET MAPPING (Used only for filtering the RESULTS we care about)
 CLASS_NAMES = {
     0: 'person',
     24: 'backpack',
     56: 'chair'
 }
 
-# Define the 3 scenarios you want to test
 SCENARIOS = [
     {
         "name": "Original (D)",
-        "dir": "datasets/D", 
+        "dir": "datasets/D",
+        "val_subdir": "images/val",
         "is_original": False 
     },
     {
         "name": "Motion Blur",
-        "dir": "datasets/D'/motion_blur", 
+        "dir": "datasets/D'/motion_blur",
+        "val_subdir": "images",
         "is_original": False
     },
     {
         "name": "Noise",
         "dir": "datasets/D'/noise",
+        "val_subdir": "images",
         "is_original": False
     }
 ]
 
-# Use standard YOLO model
-MODEL_PATH = "yolo11s.pt" 
+MODEL_PATH = "models/yolo11s.pt" 
 
 # ==========================================
-# 2. HELPER: GENERATE YAML FOR D' DATASETS
+# 2. HELPER
 # ==========================================
-def create_temp_yaml(scenario_name, directory):
-    """
-    Creates a temporary yaml file for datasets.
-    """
-    # Absolute path to images
-    img_dir = os.path.abspath(os.path.join(directory, "images"))
-    
+def create_temp_yaml(scenario, directory):
+    val_path = scenario['val_subdir']
     yaml_content = {
         'path': os.path.abspath(directory), 
-        'train': 'images', 
-        'val': 'images',   
-        'names': COCO_80_CLASSES  # <--- FIX: Pass full list so index 56 is valid
+        'train': val_path, 
+        'val': val_path,   
+        'names': COCO_80_CLASSES 
     }
-    
-    yaml_filename = f"{scenario_name.lower().replace(' ', '_')}_temp.yaml"
-    
+    yaml_filename = f"{scenario['name'].lower().replace(' ', '_')}_temp.yaml"
+
     with open(yaml_filename, 'w') as f:
         yaml.dump(yaml_content, f)
-    
-    print(f"📄 Created config for {scenario_name}: {yaml_filename}")
+
     return yaml_filename
 
 # ==========================================
-# 3. MAIN EVALUATION LOOP
+# 3. MAIN EVALUATION LOOP (UPDATED)
 # ==========================================
 def run_evaluation():
-    # Load Model
     print(f"⬇️ Loading Model: {MODEL_PATH}")
+
     try:
         model = YOLO(MODEL_PATH)
     except Exception as e:
-        print(f"Error loading model. Make sure {MODEL_PATH} exists or download it.")
-        return
+        print(f"Error loading model: {e}")
+        return pd.DataFrame()
 
     results_data = []
 
     for scenario in SCENARIOS:
         print(f"\n🚀 Evaluating Scenario: {scenario['name']}...")
-        
-        # Always create a temp YAML to ensure mapping is correct
-        yaml_file = create_temp_yaml(scenario['name'], scenario['dir'])
+        yaml_file = create_temp_yaml(scenario, scenario['dir'])
 
-        # Run Validation
-        metrics = model.val(data=yaml_file, split='val', verbose=False)
-        
-        # Extract Class-Specific Metrics
-        for class_id, class_name in CLASS_NAMES.items():
-            # Safety check: ensure the class ID exists in the results
-            # FIX: Use 'ap_class_index' instead of 'ap50_class'
-            if class_id in metrics.box.ap_class_index:
-                # Find the index of our class_id in the results array
-                idx = list(metrics.box.ap_class_index).index(class_id)
-                
-                map50 = metrics.box.ap50[idx]
-                map95 = metrics.box.maps[idx] # FIX: Use 'maps' (array) instead of 'map' (scalar)
-                
-                results_data.append({
-                    "Scenario": scenario['name'],
-                    "Class": class_name,
-                    "mAP@50": map50,
-                    "mAP@50-95": map95
-                })
-            else:
-                print(f"⚠️ Warning: No predictions/labels found for class {class_name} ({class_id}) in {scenario['name']}")
-                results_data.append({
-                    "Scenario": scenario['name'],
-                    "Class": class_name,
-                    "mAP@50": 0.0,
-                    "mAP@50-95": 0.0
-                })
+        try:
+            # Run Validation
+            metrics = model.val(data=yaml_file, split='val', verbose=False)
             
-        # Cleanup temp yaml
-        if os.path.exists(yaml_file):
-            os.remove(yaml_file)
+            for class_id, class_name in CLASS_NAMES.items():
+                if class_id in metrics.box.ap_class_index:
+                    idx = list(metrics.box.ap_class_index).index(class_id)
+                    
+                    # === NEW METRICS EXTRACTED HERE ===
+                    map50 = metrics.box.ap50[idx]
+                    map95 = metrics.box.maps[idx]
+                    precision = metrics.box.p[idx] # Precision at best confidence
+                    recall = metrics.box.r[idx]    # Recall at best confidence
+                    f1 = metrics.box.f1[idx]       # F1 Score
+                    
+                    results_data.append({
+                        "Scenario": scenario['name'],
+                        "Class": class_name,
+                        "mAP@50": map50,
+                        "mAP@50-95": map95,
+                        "Precision": precision,
+                        "Recall": recall,
+                        "F1-Score": f1
+                    })
+                else:
+                    results_data.append({
+                        "Scenario": scenario['name'],
+                        "Class": class_name,
+                        "mAP@50": 0.0, "mAP@50-95": 0.0, 
+                        "Precision": 0.0, "Recall": 0.0, "F1-Score": 0.0
+                    })
+        except Exception as e:
+            print(f"❌ Error evaluating {scenario['name']}: {e}")
+        finally:
+            if os.path.exists(yaml_file):
+                os.remove(yaml_file)
 
     return pd.DataFrame(results_data)
 
 # ==========================================
-# 4. PLOTTING RESULTS
+# 4. PLOTTING RESULTS (UPDATED 2x2 GRID)
 # ==========================================
 def plot_results(df):
     sns.set_theme(style="whitegrid")
     
-    # Create a figure with two subplots (mAP@50 and mAP@50-95)
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    # 2x2 Subplots to fit all metrics
+    fig, axes = plt.subplots(2, 2, figsize=(18, 12))
     
-    # Plot 1: mAP@50
-    sns.barplot(data=df, x="Class", y="mAP@50", hue="Scenario", ax=axes[0], palette="viridis")
-    axes[0].set_title("Comparison of mAP@50 (IoU=0.50)")
-    axes[0].set_ylim(0, 1.1)
-    
-    # Plot 2: mAP@50-95
-    sns.barplot(data=df, x="Class", y="mAP@50-95", hue="Scenario", ax=axes[1], palette="viridis")
-    axes[1].set_title("Comparison of mAP@50-95 (Robust Metric)")
-    axes[1].set_ylim(0, 1.1)
+    # 1. mAP@50-95 (The "Gold Standard" metric)
+    sns.barplot(data=df, x="Class", y="mAP@50-95", hue="Scenario", ax=axes[0,0], palette="viridis")
+    axes[0,0].set_title("mAP@50-95 (Overall Quality)")
+    axes[0,0].set_ylim(0, 1.1)
+
+    # 2. F1-Score (Balance of P & R)
+    sns.barplot(data=df, x="Class", y="F1-Score", hue="Scenario", ax=axes[0,1], palette="viridis")
+    axes[0,1].set_title("F1-Score (Harmonic Mean)")
+    axes[0,1].set_ylim(0, 1.1)
+
+    # 3. Precision (False Positives)
+    sns.barplot(data=df, x="Class", y="Precision", hue="Scenario", ax=axes[1,0], palette="viridis")
+    axes[1,0].set_title("Precision (Avoids Hallucinations)")
+    axes[1,0].set_ylim(0, 1.1)
+
+    # 4. Recall (False Negatives)
+    sns.barplot(data=df, x="Class", y="Recall", hue="Scenario", ax=axes[1,1], palette="viridis")
+    axes[1,1].set_title("Recall (Finds All Objects)")
+    axes[1,1].set_ylim(0, 1.1)
     
     plt.tight_layout()
+    
+    # Save to results folder
     save_path = "results/yolo_performance_comparison.png"
     plt.savefig(save_path)
     print(f"\n✅ Comparison plot saved to: {save_path}")
-    plt.show()
 
 # ==========================================
 # EXECUTION
 # ==========================================
 if __name__ == "__main__":
-    # 1. Run Evaluation
     df_results = run_evaluation()
-    
+
     if df_results is not None and not df_results.empty:
         os.makedirs("results", exist_ok=True)
 
-        # 2. Print Table
+        # Print Table
         print("\n📊 Final Results Table:")
         print(df_results)
-        
-        # 3. Save CSV
+
+        # Save CSV
         df_results.to_csv("results/evaluation_results.csv", index=False)
-        
-        # 4. Plot
+
+        # Plot
         plot_results(df_results)
     else:
         print("No results generated.")
