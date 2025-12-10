@@ -3,3 +3,4 @@ runs/
 models/
 venv/
 data/
+.git/
