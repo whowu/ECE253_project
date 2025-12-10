@@ -111,6 +111,6 @@ def batch_process(input_dir, output_dir):
 
 
 if __name__ == "__main__":
-    in_folder = "data/D'/D'_annotated_base/motion_blur/bag/images"
+    in_folder = "data/D'/D'_annotated_base/motion_blur/images"
     out_folder = "data/D'/D'_enhanced/motion_blur/images"
     batch_process(in_folder, out_folder)
