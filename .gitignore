@@ -2,3 +2,4 @@ fiftyone_env/
 runs/
 models/
 venv/
+data/
