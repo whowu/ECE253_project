@@ -1,0 +1,9 @@
+opencv-python
+numpy
+scikit-image
+pyyaml
+pandas
+matplotlib
+seaborn
+ultralytics
+fiftyone

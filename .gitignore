@@ -4,3 +4,9 @@ models/
 venv/
 data/
 .git/
+.DS_Store
+__pycache__/
+*.pyc
+results/
+src/algorithms/*.png
+src/algorithms/data/
