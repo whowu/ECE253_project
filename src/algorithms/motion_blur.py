@@ -14,6 +14,7 @@ def estimate_blur_level(img_gray):
     else:
         return "heavy"
 
+
 def _build_psf_impl(size, thickness=3):
     psf = np.zeros((size, size))
     center = size // 2
@@ -21,19 +22,19 @@ def _build_psf_impl(size, thickness=3):
     psf /= psf.sum()
     return psf
 
+
 def build_psf(src_dir, dst_dir, param):
     """
-    - src_dir: images input directory
-    - dst_dir: images output directory
+    - src_dir: images input directory (not used here, kept for interface)
+    - dst_dir: images output directory (not used)
     - param: list:
         [size] or [size, thickness]
     """
     if param is None:
-        # by default
         param = [15, 3]
 
     if not isinstance(param, list):
-        raise ValueError("build_psf: param 必须是 list 或 None")
+        raise ValueError("build_psf: param must be a list or None")
 
     if len(param) == 1:
         size = int(param[0])
@@ -42,16 +43,19 @@ def build_psf(src_dir, dst_dir, param):
         size = int(param[0])
         thickness = int(param[1])
     else:
-        raise ValueError("build_psf: param 应该是 [size] 或 [size, thickness]")
+        raise ValueError("build_psf: param should be [size] or [size, thickness]")
 
     return _build_psf_impl(size, thickness=thickness)
 
 
 def _process_single_image(image_path, param):
     """
-    None: take default
-    list: [psf_light, psf_medium, psf_heavy,
-            iter_light, iter_medium, iter_heavy]
+    Richardson-Lucy only.
+
+    param:
+        None: use default
+        list: [psf_light, psf_medium, psf_heavy,
+               iter_light, iter_medium, iter_heavy]
     """
     img = cv2.imread(image_path)
     if img is None:
@@ -63,20 +67,19 @@ def _process_single_image(image_path, param):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     blur_level = estimate_blur_level(gray)
 
-    # 解析 param
     if param is not None:
         if not isinstance(param, list):
-            raise ValueError("process_adaptive: param 必须是 list 或 None")
+            raise ValueError("process_adaptive: param must be a list or None")
 
         if len(param) == 6:
             psf_light, psf_medium, psf_heavy, iter_light, iter_medium, iter_heavy = param
         else:
             raise ValueError(
-                "process_adaptive: param 列表格式应为 "
-                "[psf_light, psf_medium, psf_heavy, iter_light, iter_medium, iter_heavy]"
+                "process_adaptive: param must be "
+                "[psf_light, psf_medium, psf_heavy, "
+                " iter_light, iter_medium, iter_heavy]"
             )
     else:
-        # use default
         psf_light, psf_medium, psf_heavy = 9, 15, 21
         iter_light, iter_medium, iter_heavy = 6, 15, 22
 
@@ -91,12 +94,83 @@ def _process_single_image(image_path, param):
         rl_iters = iter_heavy
 
     psf = _build_psf_impl(psf_size)
-
     final_deconv = np.zeros_like(img_float)
 
     for i in range(3):
         res = restoration.richardson_lucy(
             img_float[:, :, i],
+            psf,
+            num_iter=rl_iters
+        )
+        res = np.nan_to_num(res)
+        final_deconv[:, :, i] = np.clip(res, 0, 1)
+
+    return final_deconv, blur_level
+
+
+def _process_single_image_wiener_rl(image_path, param):
+    """
+    Wiener + RL.
+
+    param:
+        None: use default RL params and wiener_balance = 0.01
+        list: [psf_light, psf_medium, psf_heavy,
+               iter_light, iter_medium, iter_heavy,
+               wiener_balance]
+    """
+    img = cv2.imread(image_path)
+    if img is None:
+        raise FileNotFoundError(image_path)
+
+    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img_float = img_as_float(img_rgb)
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    blur_level = estimate_blur_level(gray)
+
+    if param is not None:
+        if not isinstance(param, list):
+            raise ValueError("process_wiener_rl: param must be a list or None")
+
+        if len(param) == 7:
+            psf_light, psf_medium, psf_heavy, iter_light, iter_medium, iter_heavy, wiener_balance = param
+        else:
+            raise ValueError(
+                "process_wiener_rl: param must be "
+                "[psf_light, psf_medium, psf_heavy, "
+                " iter_light, iter_medium, iter_heavy, "
+                " wiener_balance]"
+            )
+    else:
+        psf_light, psf_medium, psf_heavy = 9, 15, 21
+        iter_light, iter_medium, iter_heavy = 6, 15, 22
+        wiener_balance = 0.01
+
+    if blur_level == "light":
+        psf_size = psf_light
+        rl_iters = iter_light
+    elif blur_level == "medium":
+        psf_size = psf_medium
+        rl_iters = iter_medium
+    else:
+        psf_size = psf_heavy
+        rl_iters = iter_heavy
+
+    psf = _build_psf_impl(psf_size)
+    final_deconv = np.zeros_like(img_float)
+
+    for i in range(3):
+        wiener_res = restoration.wiener(
+            img_float[:, :, i],
+            psf,
+            balance=wiener_balance,
+            clip=False
+        )
+        wiener_res = np.nan_to_num(wiener_res)
+        wiener_res = np.clip(wiener_res, 0, 1)
+
+        res = restoration.richardson_lucy(
+            wiener_res,
             psf,
             num_iter=rl_iters
         )
@@ -114,6 +188,8 @@ def save_img(out_path, img_float_rgb):
 
 def process_adaptive(src_dir, dst_dir, param):
     """
+    RL only.
+
     - src_dir: input images directory
     - dst_dir: output images directory
     - param:
@@ -132,14 +208,13 @@ def process_adaptive(src_dir, dst_dir, param):
     count_light, count_medium, count_heavy = 0, 0, 0
 
     print(f"Found {total} images")
-    print("Starting adaptive processing...\n")
+    print("Starting adaptive RL processing...\n")
 
     for idx, fname in enumerate(all_files, start=1):
         in_path = os.path.join(src_dir, fname)
 
         try:
             deconv_img, level = _process_single_image(in_path, param)
-
             save_img(os.path.join(dst_dir, fname), deconv_img)
 
             if level == "light":
@@ -158,7 +233,63 @@ def process_adaptive(src_dir, dst_dir, param):
         except Exception as e:
             print(f"Error processing {fname}: {e}")
 
-    print("\nAll processing completed.")
+    print("\nAll RL processing completed.")
+    print("Summary:")
+    print(f" Light blur images:  {count_light}")
+    print(f" Medium blur images: {count_medium}")
+    print(f" Heavy blur images:  {count_heavy}")
+    print(f"\nOutput saved to: {dst_dir}")
+
+
+def process_wiener_rl(src_dir, dst_dir, param):
+    """
+    Wiener + RL pipeline.
+
+    - src_dir: input images directory
+    - dst_dir: output images directory
+    - param:
+        None: use default
+        list: [psf_light, psf_medium, psf_heavy,
+               iter_light, iter_medium, iter_heavy,
+               wiener_balance]
+    """
+    os.makedirs(dst_dir, exist_ok=True)
+
+    all_files = [
+        fname for fname in os.listdir(src_dir)
+        if fname.lower().endswith((".jpg", ".png", ".jpeg"))
+    ]
+
+    total = len(all_files)
+    count_light, count_medium, count_heavy = 0, 0, 0
+
+    print(f"Found {total} images")
+    print("Starting Wiener + RL processing...\n")
+
+    for idx, fname in enumerate(all_files, start=1):
+        in_path = os.path.join(src_dir, fname)
+
+        try:
+            deconv_img, level = _process_single_image_wiener_rl(in_path, param)
+            save_img(os.path.join(dst_dir, fname), deconv_img)
+
+            if level == "light":
+                count_light += 1
+            elif level == "medium":
+                count_medium += 1
+            else:
+                count_heavy += 1
+
+            progress = (idx / total) * 100 if total > 0 else 100.0
+            print(
+                f"[{idx}/{total}] {fname} processed | "
+                f"blur level: {level} | {progress:.1f}% done"
+            )
+
+        except Exception as e:
+            print(f"Error processing {fname}: {e}")
+
+    print("\nAll Wiener + RL processing completed.")
     print("Summary:")
     print(f" Light blur images:  {count_light}")
     print(f" Medium blur images: {count_medium}")
@@ -172,22 +303,29 @@ def batch_process(input_dir, output_dir):
 
 if __name__ == "__main__":
     in_folder = "data/D'/D'_annotated_base/motion_blur"
-    out_folder = "data/D'/D'_enhanced/motion_blur/ablation_study"
-    process_adaptive(in_folder, out_folder, param=None)
+    base_out = "data/D'/D'_enhanced/motion_blur/ablation_study"
 
-    experiments = {
-    "default_9_15_21_6_15_22": [9, 15, 21, 6, 15, 22],
-
-    "heavier_heavy_psf25_iter30": [9, 15, 25, 6, 15, 30],
-
-    "soft_light_strong_heavy": [7, 13, 27, 4, 12, 32],
-
-    "smaller_psf_more_iter": [7, 11, 17, 8, 18, 28],
+    experiments_rl = {
+        "rl_default_9_15_21_6_15_22": [9, 15, 21, 6, 15, 22],
+        "rl_heavier_heavy_psf25_iter30": [9, 15, 25, 6, 15, 30],
+        "rl_soft_light_strong_heavy": [7, 13, 27, 4, 12, 32],
+        "rl_smaller_psf_more_iter": [7, 11, 17, 8, 18, 28],
     }
 
+    experiments_wiener = {
+        "wr_default_9_15_21_6_15_22_b001": [9, 15, 21, 6, 15, 22, 0.01],
+        "wr_stronger_wiener_b005": [9, 15, 21, 6, 15, 22, 0.05],
+        "wr_heavier_heavy_psf25_iter30_b001": [9, 15, 25, 6, 15, 30, 0.01],
+    }
 
-    for name, param in experiments.items():
-        out_dir = os.path.join(out_folder, name)
-        print(f"\n====== Running experiment: {name} ======")
+    for name, param in experiments_rl.items():
+        out_dir = os.path.join(base_out, name)
+        print(f"\n====== Running RL experiment: {name} ======")
         print(f"param = {param}")
         process_adaptive(in_folder, out_dir, param)
+
+    for name, param in experiments_wiener.items():
+        out_dir = os.path.join(base_out, name)
+        print(f"\n====== Running Wiener+RL experiment: {name} ======")
+        print(f"param = {param}")
+        process_wiener_rl(in_folder, out_dir, param)
