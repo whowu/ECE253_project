@@ -4,8 +4,7 @@ from step2_optimize import run_step2
 from step3_finetune import run_step3
 
 def main():
-    os.makedirs("results", exist_ok=True)
-    os.makedirs("datasets/temp_processed", exist_ok=True)
+    print("\n🚀 Starting Project Pipeline...")
     
     # Step 1
     run_step1()

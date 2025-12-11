@@ -28,12 +28,37 @@ def run_step3(best_configs):
         test_labels_path = os.path.join(split_path, "labels", "test")
 
         # --- STRATEGY A: Process Test Set with Best Algo + Base Model ---
-        # Apply X (Best Algo) to Test Set
+        # Instead of reprocessing, we copy from the Step 2 output
         processed_test_imgs = os.path.join(split_path, "processed_test", "images")
         processed_test_labels = os.path.join(split_path, "processed_test", "labels")
-        apply_algorithm(
-            test_imgs_path, processed_test_imgs, config["algo"], config["param"]
-        )
+        
+        if os.path.exists(processed_test_imgs):
+            shutil.rmtree(processed_test_imgs)
+        os.makedirs(processed_test_imgs, exist_ok=True)
+
+        # Locate pre-processed images from Step 2
+        # Path: datasets/temp_processed/{distortion}/{setting}/images
+        setting = config.get("setting")
+
+        if setting:
+            src_proc_dir = os.path.join(
+                DATASET_ROOT, "temp_processed", distortion, setting, "images"
+            )
+            print(f"   📋 Copying processed test images from: {setting}...")
+
+            # Copy only the test images
+            test_filenames = os.listdir(test_imgs_path)
+            for fname in test_filenames:
+                src_file = os.path.join(src_proc_dir, fname)
+                dst_file = os.path.join(processed_test_imgs, fname)
+
+                if os.path.exists(src_file):
+                    shutil.copy(src_file, dst_file)
+                else:
+                    print(f"⚠️ Warning: Processed file missing {fname}")
+        else:
+            print("❌ Error: 'setting' key missing in best_configs. Cannot copy data.")
+            return
 
         # Copy labels
         if os.path.exists(processed_test_labels):
@@ -46,7 +71,7 @@ def run_step3(best_configs):
             split_path, "processed_test/images", "strat_a"
         )  # path relative to split_path
 
-        m_a = base_model.val(data=yaml_strat_a, verbose=False)
+        m_a = base_model.val(data=yaml_strat_a, verbose=False, device="mps")
         for cid, cname in TARGET_CLASSES.items():
             if cid in m_a.box.ap_class_index:
                 idx = list(m_a.box.ap_class_index).index(cid)
@@ -67,14 +92,16 @@ def run_step3(best_configs):
         yaml_train = create_yaml(split_path, "images/train", "train")
 
         # Quick training for demo (epochs=5). Increase for real results!
-        ft_model.train(data=yaml_train, epochs=5, imgsz=640, verbose=False)
+        ft_model.train(
+            data=yaml_train, epochs=5, imgsz=640, verbose=False, device="mps"
+        )
 
         # Evaluate New Model on Unprocessed Test Set
         # We reuse the yaml but point validation to test set
         # Actually create specific test yaml
         yaml_test = create_yaml(split_path, "images/test", "test_eval")
 
-        m_b = ft_model.val(data=yaml_test, verbose=False)
+        m_b = ft_model.val(data=yaml_test, verbose=False, device="mps")
         for cid, cname in TARGET_CLASSES.items():
             if cid in m_b.box.ap_class_index:
                 idx = list(m_b.box.ap_class_index).index(cid)
@@ -107,5 +134,13 @@ def run_step3(best_configs):
 
 if __name__ == "__main__":
     # Example mock input if running standalone
-    mock_configs = {"noise": {"algo": "CBM3D", "param": 0.0980}}
+    mock_configs = {
+        "motion_blur": {
+            "setting": "Richardson-Lucy_p1",
+            "algo": "Richardson-Lucy",
+            "param": [9, 15, 21, 6, 15, 22],
+        },
+        "noise": {"setting": "CBM3D_p3", "algo": "CBM3D", "param": 0.1569},
+        "spatial_blur": {"setting": "CLAHE_p1", "algo": "CLAHE", "param": [2.0]},
+    }
     run_step3(mock_configs)

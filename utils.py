@@ -7,6 +7,8 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from config import COCO_CLASSES, RESULTS_DIR
 from algorithms.denoising import apply_bilateral, apply_cbm3d
+from algorithms.motion_blur import process_adaptive, process_wiener
+from algorithms.spatial_blur import spatial_contrast, spatial_sharpen
 
 def create_yaml(dataset_path, img_dir, name_suffix=""):
     """Generates a temporary YAML file for YOLO validation/training."""
@@ -37,6 +39,7 @@ def plot_metrics(df, title, filename, group_col="Scenario", metric="mAP@50-95"):
     ax.set_ylim(0, 1.1)
 
     save_path = os.path.join(RESULTS_DIR, filename)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
     plt.savefig(save_path)
     plt.close()
     print(f"✅ Plot saved: {save_path}")
@@ -55,9 +58,12 @@ def apply_algorithm(src_dir, dst_dir, algo_name, param):
     # 1. Map string names to actual functions
     # These functions must accept (src_dir, dst_dir, param)
     ALGO_MAP = {
+        "Richardson-Lucy": process_adaptive,
+        "Wiener": process_wiener,
         "Bilateral": apply_bilateral,
         "CBM3D": apply_cbm3d,
-        # Add 'Deblur_Algo': apply_deblur_dir, etc. later
+        "CLAHE": spatial_contrast,
+        "Spatial_sharpen": spatial_sharpen,
     }
 
     # 2. Get the function
@@ -93,11 +99,15 @@ def split_dataset(src_root, train_ratio=0.8):
 
     # Create new split dirs
     split_root = src_root + "_split"
+
+    if os.path.exists(split_root):
+        shutil.rmtree(split_root)
+
     for split in ["train", "test"]:
         os.makedirs(os.path.join(split_root, "images", split), exist_ok=True)
         os.makedirs(os.path.join(split_root, "labels", split), exist_ok=True)
 
-    all_images = [f for f in os.listdir(images_dir) if f.endswith((".jpg", ".png"))]
+    all_images = [f for f in os.listdir(images_dir) if f.lower().endswith((".jpg", ".png"))]
     train_imgs, test_imgs = train_test_split(
         all_images, train_size=train_ratio, random_state=42
     )

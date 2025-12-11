@@ -26,7 +26,7 @@ def run_step2():
         # 1. Evaluate Original Distorted (Baseline for this plot)
         # Note: In real logic, you might reuse Step 1 result, but we re-run for simplicity
         yaml_base = create_yaml(original_dist_path, original_img_dir, "base")
-        m_base = model.val(data=yaml_base, verbose=False)
+        m_base = model.val(data=yaml_base, verbose=False, device='mps')
         for cid, cname in TARGET_CLASSES.items():
             if cid in m_base.box.ap_class_index:
                 idx = list(m_base.box.ap_class_index).index(cid)
@@ -41,8 +41,8 @@ def run_step2():
 
         # 2. Loop Algos and Params
         for algo_name, params in algos.items():
-            for p in params:
-                setting_name = f"{algo_name}_p{p}"
+            for i, p in enumerate(params, 1):
+                setting_name = f"{algo_name}_p{i}"
 
                 # Create temporary processed dataset folder
                 processed_path = os.path.join(
@@ -54,24 +54,27 @@ def run_step2():
                 # Need absolute path for images
                 src_img = os.path.join(original_dist_path, original_img_dir)
                 dst_img = os.path.join(processed_path, processed_img_dir)
-                apply_algorithm(src_img, dst_img, algo_name, p)
+                
+                # ========================= Turned off: Datasets Processed ===========================
+                # apply_algorithm(src_img, dst_img, algo_name, p)
 
-                # Copy labels
-                src_labels = os.path.join(original_dist_path, "labels")
-                dst_labels = os.path.join(processed_path, "labels")
+                # # Copy labels
+                # src_labels = os.path.join(original_dist_path, "labels")
+                # dst_labels = os.path.join(processed_path, "labels")
 
-                if os.path.exists(dst_labels):
-                    shutil.rmtree(dst_labels)
+                # if os.path.exists(dst_labels):
+                #     shutil.rmtree(dst_labels)
 
-                if os.path.exists(src_labels):
-                    shutil.copytree(src_labels, dst_labels)
-                else:
-                    print(f"⚠️ Warning: No labels found at {src_labels}")
+                # if os.path.exists(src_labels):
+                #     shutil.copytree(src_labels, dst_labels)
+                # else:
+                #     print(f"⚠️ Warning: No labels found at {src_labels}")
+                # ====================================================================================
 
                 # Evaluate
                 yaml_proc = create_yaml(processed_path, processed_img_dir, "proc")
                 try:
-                    metrics = model.val(data=yaml_proc, verbose=False)
+                    metrics = model.val(data=yaml_proc, verbose=False, device='mps')
                     current_map_sum = 0
                     for cid, cname in TARGET_CLASSES.items():
                         if cid in metrics.box.ap_class_index:
@@ -109,6 +112,7 @@ def run_step2():
             best_setting = df_algos.groupby("Setting")["mAP@50-95"].mean().idxmax()
             best_row = df_algos[df_algos["Setting"] == best_setting].iloc[0]
             best_configs[distortion] = {
+                "setting": best_setting,
                 "algo": best_row["raw_algo"],
                 "param": best_row["raw_param"],
             }

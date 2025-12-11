@@ -47,15 +47,15 @@ BASELINE_SCENARIOS = [
 # 6 Unique Algorithms (2 per distortion) with 3 tunable params each
 ALGO_CONFIGS = {
     'motion_blur': {
-        'Algo_A': [3, 5, 7],       # e.g., Kernel sizes
-        'Algo_B': [0.1, 0.5, 0.9]  # e.g., Deconvolution strength
+        'Richardson-Lucy': [[9, 15, 21, 6, 15, 22], [9, 15, 25, 6, 15, 30], [7, 13, 27, 4, 12, 32]],
+        'Wiener': [[9, 15, 21, 0.01], [9, 15, 21, 0.05], [9, 15, 25, 0.02]]
     },
     'noise': {
         'Bilateral': [(5, 50, 50), (9, 75, 75), (15, 100, 100)],
         'CBM3D': [0.0588, 0.0980, 0.1569]
     },
     'spatial_blur': {
-        'Algo_E': [0.5, 1.0, 1.5], # e.g., Sharpening factor
-        'Algo_F': [2, 4, 8]        # e.g., Window size
+        'CLAHE': [[2.0], [2.5], [3.0]],
+        'Spatial_sharpen': [[0.8, 1.0], [1.0, 1.2], [1.2, 1.5]]
     }
 }
