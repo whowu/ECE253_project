@@ -281,14 +281,51 @@ def spatial_adaptive(src_dir, dst_dir, param):
 
 
 def batch_process(input_dir, output_dir):
+    # default entry for unified interface
     return spatial_adaptive(input_dir, output_dir, param=None)
 
 
 if __name__ == "__main__":
-    in_dir = "data/D'/D'_annotated_base/spatial_blur/images"
-    out_dir = "data/D'/D'_enhanced/spatial_blur/images"
+    # raw spatial blur images
+    in_folder = "data/D'/D'_base/spatial_blur/images"
 
-    func = spatial_adaptive
-    param = None
+    # base output directory, aligned with motion_blur layout
+    base_out = "data/D'/D'_enhanced/spatial_blur/images"
 
-    func(in_dir, out_dir, param)
+    # three parameter sets for spatial_contrast (CLAHE)
+    # param format for spatial_contrast: [clip_limit]
+    experiments_contrast = {
+        "contrast_p1": [2.0],
+        "contrast_p2": [2.5],
+        "contrast_p3": [3.0],
+    }
+
+    # three parameter sets for spatial_sharpen (highlight-aware sharpen)
+    # param format for spatial_sharpen: [amount, sigma]
+    experiments_sharpen = {
+        "sharpen_p1": [0.8, 1.0],
+        "sharpen_p2": [1.0, 1.2],
+        "sharpen_p3": [1.2, 1.5],
+    }
+
+    # CLAHE experiments
+    for name, param in experiments_contrast.items():
+        exp_root = os.path.join(base_out, name)
+        out_dir = os.path.join(exp_root, "images")
+        labels_dir = os.path.join(exp_root, "labels")
+        os.makedirs(labels_dir, exist_ok=True)
+
+        print(f"\n====== Running spatial_contrast experiment: {name} ======")
+        print(f"param = {param}")
+        spatial_contrast(in_folder, out_dir, param)
+
+    # highlight-aware sharpening experiments
+    for name, param in experiments_sharpen.items():
+        exp_root = os.path.join(base_out, name)
+        out_dir = os.path.join(exp_root, "images")
+        labels_dir = os.path.join(exp_root, "labels")
+        os.makedirs(labels_dir, exist_ok=True)
+
+        print(f"\n====== Running spatial_sharpen experiment: {name} ======")
+        print(f"param = {param}")
+        spatial_sharpen(in_folder, out_dir, param)

@@ -108,14 +108,13 @@ def _process_single_image(image_path, param):
     return final_deconv, blur_level
 
 
-def _process_single_image_wiener_rl(image_path, param):
+def _process_single_image_wiener(image_path, param):
     """
-    Wiener + RL.
+    Wiener only.
 
     param:
-        None: use default RL params and wiener_balance = 0.01
+        None: use default
         list: [psf_light, psf_medium, psf_heavy,
-               iter_light, iter_medium, iter_heavy,
                wiener_balance]
     """
     img = cv2.imread(image_path)
@@ -130,31 +129,25 @@ def _process_single_image_wiener_rl(image_path, param):
 
     if param is not None:
         if not isinstance(param, list):
-            raise ValueError("process_wiener_rl: param must be a list or None")
+            raise ValueError("process_wiener: param must be a list or None")
 
-        if len(param) == 7:
-            psf_light, psf_medium, psf_heavy, iter_light, iter_medium, iter_heavy, wiener_balance = param
+        if len(param) == 4:
+            psf_light, psf_medium, psf_heavy, wiener_balance = param
         else:
             raise ValueError(
-                "process_wiener_rl: param must be "
-                "[psf_light, psf_medium, psf_heavy, "
-                " iter_light, iter_medium, iter_heavy, "
-                " wiener_balance]"
+                "process_wiener: param must be "
+                "[psf_light, psf_medium, psf_heavy, wiener_balance]"
             )
     else:
         psf_light, psf_medium, psf_heavy = 9, 15, 21
-        iter_light, iter_medium, iter_heavy = 6, 15, 22
         wiener_balance = 0.01
 
     if blur_level == "light":
         psf_size = psf_light
-        rl_iters = iter_light
     elif blur_level == "medium":
         psf_size = psf_medium
-        rl_iters = iter_medium
     else:
         psf_size = psf_heavy
-        rl_iters = iter_heavy
 
     psf = _build_psf_impl(psf_size)
     final_deconv = np.zeros_like(img_float)
@@ -167,15 +160,7 @@ def _process_single_image_wiener_rl(image_path, param):
             clip=False
         )
         wiener_res = np.nan_to_num(wiener_res)
-        wiener_res = np.clip(wiener_res, 0, 1)
-
-        res = restoration.richardson_lucy(
-            wiener_res,
-            psf,
-            num_iter=rl_iters
-        )
-        res = np.nan_to_num(res)
-        final_deconv[:, :, i] = np.clip(res, 0, 1)
+        final_deconv[:, :, i] = np.clip(wiener_res, 0, 1)
 
     return final_deconv, blur_level
 
@@ -241,16 +226,15 @@ def process_adaptive(src_dir, dst_dir, param):
     print(f"\nOutput saved to: {dst_dir}")
 
 
-def process_wiener_rl(src_dir, dst_dir, param):
+def process_wiener(src_dir, dst_dir, param):
     """
-    Wiener + RL pipeline.
+    Wiener only.
 
     - src_dir: input images directory
     - dst_dir: output images directory
     - param:
         None: use default
         list: [psf_light, psf_medium, psf_heavy,
-               iter_light, iter_medium, iter_heavy,
                wiener_balance]
     """
     os.makedirs(dst_dir, exist_ok=True)
@@ -264,13 +248,13 @@ def process_wiener_rl(src_dir, dst_dir, param):
     count_light, count_medium, count_heavy = 0, 0, 0
 
     print(f"Found {total} images")
-    print("Starting Wiener + RL processing...\n")
+    print("Starting Wiener processing...\n")
 
     for idx, fname in enumerate(all_files, start=1):
         in_path = os.path.join(src_dir, fname)
 
         try:
-            deconv_img, level = _process_single_image_wiener_rl(in_path, param)
+            deconv_img, level = _process_single_image_wiener(in_path, param)
             save_img(os.path.join(dst_dir, fname), deconv_img)
 
             if level == "light":
@@ -289,7 +273,7 @@ def process_wiener_rl(src_dir, dst_dir, param):
         except Exception as e:
             print(f"Error processing {fname}: {e}")
 
-    print("\nAll Wiener + RL processing completed.")
+    print("\nAll Wiener processing completed.")
     print("Summary:")
     print(f" Light blur images:  {count_light}")
     print(f" Medium blur images: {count_medium}")
@@ -302,30 +286,43 @@ def batch_process(input_dir, output_dir):
 
 
 if __name__ == "__main__":
-    in_folder = "data/D'/D'_annotated_base/motion_blur"
-    base_out = "data/D'/D'_enhanced/motion_blur/ablation_study"
+    # raw motion blur images
+    in_folder = "data/D'/D'_base/motion_blur/images"
 
+    base_out = "data/D'/D'_enhanced/motion_blur"
+
+    # three parameter sets for RL (p1, p2, p3)
     experiments_rl = {
-        "rl_default_9_15_21_6_15_22": [9, 15, 21, 6, 15, 22],
-        "rl_heavier_heavy_psf25_iter30": [9, 15, 25, 6, 15, 30],
-        "rl_soft_light_strong_heavy": [7, 13, 27, 4, 12, 32],
-        "rl_smaller_psf_more_iter": [7, 11, 17, 8, 18, 28],
+        "RL_p1": [9, 15, 21, 6, 15, 22],
+        "RL_p2": [9, 15, 25, 6, 15, 30],
+        "RL_p3": [7, 13, 27, 4, 12, 32],
     }
 
+    # three parameter sets for Wiener (p1, p2, p3)
     experiments_wiener = {
-        "wr_default_9_15_21_6_15_22_b001": [9, 15, 21, 6, 15, 22, 0.01],
-        "wr_stronger_wiener_b005": [9, 15, 21, 6, 15, 22, 0.05],
-        "wr_heavier_heavy_psf25_iter30_b001": [9, 15, 25, 6, 15, 30, 0.01],
+        "Wiener_p1": [9, 15, 21, 0.01],
+        "Wiener_p2": [9, 15, 21, 0.05],
+        "Wiener_p3": [9, 15, 25, 0.02],
     }
 
+    # RL experiments
     for name, param in experiments_rl.items():
-        out_dir = os.path.join(base_out, name)
+        exp_root = os.path.join(base_out, name)
+        out_dir = os.path.join(exp_root, "images")
+        labels_dir = os.path.join(exp_root, "labels")
+        os.makedirs(labels_dir, exist_ok=True)
+
         print(f"\n====== Running RL experiment: {name} ======")
         print(f"param = {param}")
         process_adaptive(in_folder, out_dir, param)
 
+    # Wiener experiments
     for name, param in experiments_wiener.items():
-        out_dir = os.path.join(base_out, name)
-        print(f"\n====== Running Wiener+RL experiment: {name} ======")
+        exp_root = os.path.join(base_out, name)
+        out_dir = os.path.join(exp_root, "images")
+        labels_dir = os.path.join(exp_root, "labels")
+        os.makedirs(labels_dir, exist_ok=True)
+
+        print(f"\n====== Running Wiener experiment: {name} ======")
         print(f"param = {param}")
-        process_wiener_rl(in_folder, out_dir, param)
+        process_wiener(in_folder, out_dir, param)
