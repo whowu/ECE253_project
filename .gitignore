@@ -3,6 +3,7 @@ runs/
 models/
 venv/
 data/
+datasets/
 .git/
 .DS_Store
 __pycache__/

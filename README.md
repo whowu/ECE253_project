@@ -1,3 +1,4 @@
 # ECE253_project
 
-TBD
+Move algorithms under algorithms/.
+Finish ALGO_MAP in utils.py, import related functions.
