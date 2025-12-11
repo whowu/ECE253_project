@@ -280,7 +280,6 @@ def spatial_adaptive(src_dir, dst_dir, param):
     print(f"output dir:  {dst_dir}")
 
 
-# 老的 batch_process 保留 直接调用自适应 algo
 def batch_process(input_dir, output_dir):
     return spatial_adaptive(input_dir, output_dir, param=None)
 
