@@ -10,6 +10,7 @@ from algorithms.denoising import apply_bilateral, apply_cbm3d
 from algorithms.motion_blur import process_adaptive, process_wiener
 from algorithms.spatial_blur import spatial_contrast, spatial_sharpen
 
+
 def create_yaml(dataset_path, img_dir, name_suffix=""):
     """Generates a temporary YAML file for YOLO validation/training."""
     yaml_content = {
@@ -24,25 +25,51 @@ def create_yaml(dataset_path, img_dir, name_suffix=""):
     return filename
 
 
-def plot_metrics(df, title, filename, group_col="Scenario", metric="mAP@50-95"):
-    """Generic plotting function."""
-    plt.figure(figsize=(12, 6))
-    sns.set_theme(style="whitegrid")
-
-    # Check if we have data
+def save_results_to_csv(df, filename):
+    """Saves the results DataFrame to a CSV file."""
     if df.empty:
-        print(f"⚠️ No data to plot for {filename}")
         return
-
-    ax = sns.barplot(data=df, x="Class", y=metric, hue=group_col, palette="viridis")
-    ax.set_title(title)
-    ax.set_ylim(0, 1.1)
 
     save_path = os.path.join(RESULTS_DIR, filename)
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    plt.savefig(save_path)
-    plt.close()
-    print(f"✅ Plot saved: {save_path}")
+    df.to_csv(save_path, index=False)
+    print(f"💾 Results saved to CSV: {save_path}")
+
+
+def plot_metrics(df, title_prefix, filename_prefix, group_col="Scenario", metrics_to_plot=None):
+    """
+    Plots multiple metrics (mAP, Precision, Recall, F1) and saves them as separate images.
+    
+    Args:
+        metrics_to_plot: List of columns to plot. Defaults to ['mAP@50-95', 'Precision', 'Recall', 'F1-Score'].
+    """
+    if df.empty:
+        print(f"⚠️ No data to plot for {filename_prefix}")
+        return
+
+    if metrics_to_plot is None:
+        metrics_to_plot = ["mAP@50-95", "Precision", "Recall", "F1-Score"]
+
+    sns.set_theme(style="whitegrid")
+
+    for metric in metrics_to_plot:
+        if metric not in df.columns:
+            continue
+            
+        plt.figure(figsize=(12, 6))
+        ax = sns.barplot(data=df, x="Class", y=metric, hue=group_col, palette="viridis")
+        ax.set_title(f"{title_prefix} - {metric}")
+        ax.set_ylim(0, 1.1)
+        
+        # Construct filename: e.g., step1_baseline_Precision.png
+        clean_metric_name = metric.replace("@", "_").replace("-", "_")
+        fname = f"{filename_prefix}_{clean_metric_name}.png"
+        save_path = os.path.join(RESULTS_DIR, fname)
+        
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path)
+        plt.close()
+        print(f"✅ Plot saved: {save_path}")
 
 
 def apply_algorithm(src_dir, dst_dir, algo_name, param):
@@ -107,7 +134,9 @@ def split_dataset(src_root, train_ratio=0.8):
         os.makedirs(os.path.join(split_root, "images", split), exist_ok=True)
         os.makedirs(os.path.join(split_root, "labels", split), exist_ok=True)
 
-    all_images = [f for f in os.listdir(images_dir) if f.lower().endswith((".jpg", ".png"))]
+    all_images = [
+        f for f in os.listdir(images_dir) if f.lower().endswith((".jpg", ".png"))
+    ]
     train_imgs, test_imgs = train_test_split(
         all_images, train_size=train_ratio, random_state=42
     )

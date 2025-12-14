@@ -2,8 +2,8 @@ import pandas as pd
 import os
 import shutil
 from ultralytics import YOLO
-from config import MODEL_PATH, DATASET_ROOT, TARGET_CLASSES
-from utils import create_yaml, plot_metrics, apply_algorithm, split_dataset
+from config import DEVICE, MODEL_PATH, DATASET_ROOT, TARGET_CLASSES
+from utils import create_yaml, save_results_to_csv, plot_metrics, split_dataset
 
 
 def run_step3(best_configs):
@@ -31,7 +31,7 @@ def run_step3(best_configs):
         # Instead of reprocessing, we copy from the Step 2 output
         processed_test_imgs = os.path.join(split_path, "processed_test", "images")
         processed_test_labels = os.path.join(split_path, "processed_test", "labels")
-        
+
         if os.path.exists(processed_test_imgs):
             shutil.rmtree(processed_test_imgs)
         os.makedirs(processed_test_imgs, exist_ok=True)
@@ -71,7 +71,7 @@ def run_step3(best_configs):
             split_path, "processed_test/images", "strat_a"
         )  # path relative to split_path
 
-        m_a = base_model.val(data=yaml_strat_a, verbose=False, device="mps")
+        m_a = base_model.val(data=yaml_strat_a, verbose=False, device=DEVICE)
         for cid, cname in TARGET_CLASSES.items():
             if cid in m_a.box.ap_class_index:
                 idx = list(m_a.box.ap_class_index).index(cid)
@@ -81,6 +81,9 @@ def run_step3(best_configs):
                         "Strategy": "Img Processing",
                         "Class": cname,
                         "mAP@50-95": m_a.box.maps[idx],
+                        "Precision": m_a.box.p[idx],
+                        "Recall": m_a.box.r[idx],
+                        "F1-Score": m_a.box.f1[idx],
                     }
                 )
         os.remove(yaml_strat_a)
@@ -93,7 +96,7 @@ def run_step3(best_configs):
 
         # Quick training for demo (epochs=5). Increase for real results!
         ft_model.train(
-            data=yaml_train, epochs=5, imgsz=640, verbose=False, device="mps"
+            data=yaml_train, epochs=5, imgsz=640, verbose=False, device=DEVICE
         )
 
         # Evaluate New Model on Unprocessed Test Set
@@ -101,7 +104,7 @@ def run_step3(best_configs):
         # Actually create specific test yaml
         yaml_test = create_yaml(split_path, "images/test", "test_eval")
 
-        m_b = ft_model.val(data=yaml_test, verbose=False, device="mps")
+        m_b = ft_model.val(data=yaml_test, verbose=False, device=DEVICE)
         for cid, cname in TARGET_CLASSES.items():
             if cid in m_b.box.ap_class_index:
                 idx = list(m_b.box.ap_class_index).index(cid)
@@ -111,6 +114,9 @@ def run_step3(best_configs):
                         "Strategy": "Fine-Tuning",
                         "Class": cname,
                         "mAP@50-95": m_b.box.maps[idx],
+                        "Precision": m_b.box.p[idx],
+                        "Recall": m_b.box.r[idx],
+                        "F1-Score": m_b.box.f1[idx],
                     }
                 )
 
@@ -121,13 +127,17 @@ def run_step3(best_configs):
     # Plot Comparison
     if results:
         df = pd.DataFrame(results)
+
+        # Save CSV
+        save_results_to_csv(df, "step3_finetune_results.csv")
+
         # Create separate plots for each distortion
         for distortion in best_configs.keys():
             subset = df[df["Distortion"] == distortion]
             plot_metrics(
                 subset,
-                f"Best Algo vs Fine-Tuning ({distortion})",
-                f"step3_{distortion}.png",
+                f"Step 3: Best Algo vs Fine-Tuning ({distortion})",
+                f"step3_{distortion}",
                 group_col="Strategy",
             )
 

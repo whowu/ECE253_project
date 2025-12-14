@@ -1,7 +1,7 @@
 import pandas as pd
 from ultralytics import YOLO
-from config import MODEL_PATH, BASELINE_SCENARIOS, TARGET_CLASSES
-from utils import create_yaml, plot_metrics
+from config import DEVICE, MODEL_PATH, BASELINE_SCENARIOS, TARGET_CLASSES
+from utils import create_yaml, save_results_to_csv, plot_metrics
 import os
 
 
@@ -18,7 +18,7 @@ def run_step1():
         yaml_file = create_yaml(scen["path"], scen["split"], "step1")
 
         try:
-            metrics = model.val(data=yaml_file, verbose=False, device="mps")
+            metrics = model.val(data=yaml_file, verbose=False, device=DEVICE)
             for cid, cname in TARGET_CLASSES.items():
                 if cid in metrics.box.ap_class_index:
                     idx = list(metrics.box.ap_class_index).index(cid)
@@ -27,6 +27,9 @@ def run_step1():
                             "Scenario": scen["name"],
                             "Class": cname,
                             "mAP@50-95": metrics.box.maps[idx],
+                            "Precision": metrics.box.p[idx],
+                            "Recall": metrics.box.r[idx],
+                            "F1-Score": metrics.box.f1[idx],
                         }
                     )
         except Exception as e:
@@ -37,7 +40,8 @@ def run_step1():
 
     df = pd.DataFrame(results)
     if not df.empty:
-        plot_metrics(df, "Step 1: Baseline vs Distortions", "step1_baseline.png")
+        save_results_to_csv(df, "step1_baseline_results.csv")
+        plot_metrics(df, "Step 1: Baseline", "step1_baseline", group_col="Scenario")
     return df
 
 

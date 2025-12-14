@@ -3,6 +3,9 @@ import os
 # =========================
 # GLOBAL SETTINGS
 # =========================
+# CHANGE THIS to 'cuda' (NVIDIA), 'mps' (Mac), or 'cpu'
+DEVICE = "mps"
+
 MODEL_PATH = "models/yolo11s.pt"
 RESULTS_DIR = "results"
 DATASET_ROOT = "datasets"
@@ -46,13 +49,13 @@ BASELINE_SCENARIOS = [
 # =========================
 # 6 Unique Algorithms (2 per distortion) with 3 tunable params each
 ALGO_CONFIGS = {
-    'motion_blur': {
-        'Richardson-Lucy': [[9, 15, 21, 6, 15, 22], [9, 15, 25, 6, 15, 30], [7, 13, 27, 4, 12, 32]],
-        'Wiener': [[9, 15, 21, 0.01], [9, 15, 21, 0.05], [9, 15, 25, 0.02]]
-    },
     'noise': {
         'Bilateral': [(5, 50, 50), (9, 75, 75), (15, 100, 100)],
         'CBM3D': [0.0588, 0.0980, 0.1569]
+    },
+    'motion_blur': {
+        'Richardson-Lucy': [[9, 15, 21, 6, 15, 22], [9, 15, 25, 6, 15, 30], [7, 13, 27, 4, 12, 32]],
+        'Wiener': [[9, 15, 21, 0.01], [9, 15, 21, 0.05], [9, 15, 25, 0.02]]
     },
     'spatial_blur': {
         'CLAHE': [[2.0], [2.5], [3.0]],
