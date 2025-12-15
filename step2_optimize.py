@@ -3,7 +3,7 @@ import os
 import shutil
 from ultralytics import YOLO
 from config import DEVICE, MODEL_PATH, ALGO_CONFIGS, DATASET_ROOT, TARGET_CLASSES
-from utils import create_yaml, save_results_to_csv, plot_metrics, apply_algorithm
+from utils import clean_yolo_cache, create_yaml, save_results_to_csv, plot_metrics, apply_algorithm
 
 
 def run_step2():
@@ -26,6 +26,8 @@ def run_step2():
 
         # 1. Evaluate Original Distorted (Baseline for this plot)
         # Note: In real logic, you might reuse Step 1 result, but we re-run for simplicity
+        clean_yolo_cache(original_dist_path)
+
         yaml_base = create_yaml(original_dist_path, original_img_dir, "base")
         m_base = model.val(data=yaml_base, verbose=False, device=DEVICE)
         for cid, cname in TARGET_CLASSES.items():
@@ -77,6 +79,8 @@ def run_step2():
                 # else:
                 #     print(f"⚠️ Warning: No labels found at {src_labels}")
                 # ====================================================================================
+
+                clean_yolo_cache(processed_path)
 
                 # Evaluate
                 yaml_proc = create_yaml(processed_path, processed_img_dir, "proc")

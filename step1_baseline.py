@@ -1,7 +1,7 @@
 import pandas as pd
 from ultralytics import YOLO
 from config import DEVICE, MODEL_PATH, BASELINE_SCENARIOS, TARGET_CLASSES
-from utils import create_yaml, save_results_to_csv, plot_metrics
+from utils import clean_yolo_cache, create_yaml, save_results_to_csv, plot_metrics
 import os
 
 
@@ -15,6 +15,9 @@ def run_step1():
 
     for scen in BASELINE_SCENARIOS:
         print(f"Evaluating {scen['name']}...")
+
+        clean_yolo_cache(scen["path"])
+
         yaml_file = create_yaml(scen["path"], scen["split"], "step1")
 
         try:

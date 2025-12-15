@@ -1,6 +1,7 @@
 import os
 import yaml
 import shutil
+import glob
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
@@ -9,6 +10,26 @@ from config import COCO_CLASSES, RESULTS_DIR
 from algorithms.denoising import apply_bilateral, apply_cbm3d
 from algorithms.motion_blur import process_adaptive, process_wiener
 from algorithms.spatial_blur import spatial_contrast, spatial_sharpen
+
+
+def clean_yolo_cache(dataset_path):
+    """
+    Recursively finds and deletes all *.cache files in the dataset directory.
+    This forces YOLO to re-scan the dataset (crucial when images/labels change).
+    """
+    if not os.path.exists(dataset_path):
+        return
+
+    # Look for .cache files recursively
+    # YOLO usually saves them in the labels folder, but we check everywhere just in case
+    cache_files = glob.glob(os.path.join(dataset_path, "**", "*.cache"), recursive=True)
+
+    for cache_file in cache_files:
+        try:
+            os.remove(cache_file)
+            print(f"   🧹 Removed cache: {cache_file}")
+        except OSError as e:
+            print(f"   ⚠️ Could not remove cache {cache_file}: {e}")
 
 
 def create_yaml(dataset_path, img_dir, name_suffix=""):
@@ -36,10 +57,12 @@ def save_results_to_csv(df, filename):
     print(f"💾 Results saved to CSV: {save_path}")
 
 
-def plot_metrics(df, title_prefix, filename_prefix, group_col="Scenario", metrics_to_plot=None):
+def plot_metrics(
+    df, title_prefix, filename_prefix, group_col="Scenario", metrics_to_plot=None
+):
     """
     Plots multiple metrics (mAP, Precision, Recall, F1) and saves them as separate images.
-    
+
     Args:
         metrics_to_plot: List of columns to plot. Defaults to ['mAP@50-95', 'Precision', 'Recall', 'F1-Score'].
     """
@@ -55,17 +78,17 @@ def plot_metrics(df, title_prefix, filename_prefix, group_col="Scenario", metric
     for metric in metrics_to_plot:
         if metric not in df.columns:
             continue
-            
+
         plt.figure(figsize=(12, 6))
         ax = sns.barplot(data=df, x="Class", y=metric, hue=group_col, palette="viridis")
         ax.set_title(f"{title_prefix} - {metric}")
         ax.set_ylim(0, 1.1)
-        
+
         # Construct filename: e.g., step1_baseline_Precision.png
         clean_metric_name = metric.replace("@", "_").replace("-", "_")
         fname = f"{filename_prefix}_{clean_metric_name}.png"
         save_path = os.path.join(RESULTS_DIR, fname)
-        
+
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path)
         plt.close()
@@ -157,6 +180,8 @@ def split_dataset(src_root, train_ratio=0.8):
                     src_label,
                     os.path.join(split_root, "labels", split_name, label_name),
                 )
+            else:
+                print(f"⚠️ Warning: Missing label for {img_name}")
 
     copy_files(train_imgs, "train")
     copy_files(test_imgs, "test")
