@@ -1,100 +1,124 @@
 # ECE 253 Project - Team RHS
 
 ## Overview
-This project is developed by **Team RHS** for **ECE 253 Fundamentals of Digital Image Processing**. The goal is to evaluate and improve the performance of object detection (YOLO11) on distorted images. We investigate two primary approaches:
-1. **Image Restoration:** Applying algorithms to remove distortions (Noise, Motion Blur, Spatial Blur) before detection.
-2. **Fine-tuning:** Retraining the model on the distorted datasets.
+**Team RHS** presents this project for **ECE 253: Fundamentals of Digital Image Processing**. 
+
+**Goal:** Evaluate and enhance YOLO11 object detection performance on distorted images (Noise, Motion Blur, Spatial Blur).
+
+**Approaches:**
+1.  **Image Restoration:** Pre-processing images to remove distortions before detection.
+2.  **Fine-tuning:** Retraining the YOLO model on distorted datasets.
 
 ## Project Structure
 ```text
 .
-├── algorithms/             # Implementation of restoration algorithms
-├── config.py               # Configuration for paths, model parameters, and algorithms
-├── datasets/               # Dataset directory (see Datasets section)
-├── download_coco.py        # Script to download COCO dataset
-├── main.py                 # Main script to execute the project pipeline
+├── algorithms/             # Restoration algorithm implementations
+├── config.py               # Global configuration (paths, params)
+├── datasets/               # Dataset root directory
+├── download_coco.py        # Script to download clean COCO subset (D)
+├── main.py                 # Master script for the full pipeline
 ├── models/                 # YOLO model weights
 ├── requirements.txt        # Python dependencies
-├── results/                # Output CSVs and plots
-├── runs/                   # YOLO training and validation logs
+├── results/                # Output metrics and plots
+├── runs/                   # YOLO training logs
 ├── step1_baseline.py       # Step 1: Baseline evaluation
-├── step2_optimize.py       # Step 2: Algorithm optimization
+├── step2_optimize.py       # Step 2: Algorithm optimization & processing
 ├── step3_finetune.py       # Step 3: Fine-tuning comparison
-└── utils.py                # Helper functions
+└── utils.py                # Utility functions
 ```
 
 ## Installation
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/whowu/ECE253_project.git
-   cd ECE253_project
-   ```
-2. Install the required packages:
-   ```bash
-   pip install -r requirements.txt
-   ```
+
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/whowu/ECE253_project.git
+    cd ECE253_project
+    ```
+
+2.  **Install dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
 ## Dataset Setup
-This project requires a specific directory structure.
 
-### Generate Clean Data (D)
-We use a subset of the COCO 2017 validation set, filtering for the classes: `person`, `backpack`, and `chair`. Run the downloader script:
-```bash
-python download_coco.py
-```
-*This utilizes the `fiftyone` library to download and export the images to `datasets/D`.*
+You have two options to set up the data: **Download Pre-prepared Data** (Recommended) or **Generate from Scratch**.
 
-### Distorted Data (D')
-Ensure your distorted datasets are placed in `datasets/D'` with the following structure:
+### Option 1: Quick Start (Recommended)
+For full reproducibility, download our complete dataset package, which includes the clean subset ($D$), distorted versions ($D'$), and pre-processed images (`temp_processed`).
 
-```text
-datasets/D'/
-├── motion_blur/
-│   ├── images/
-│   └── labels/
-├── noise/
-│   ├── images/
-│   └── labels/
-└── spatial_blur/
-    ├── images/
-    └── labels/
-```
+[**📂 Download Complete Dataset (Google Drive)**](https://drive.google.com/drive/folders/1OR3uKI6bM9DtiyBHx6ExYk4VXus16v-e?usp=share_link)
+
+1.  Download and extract the content.
+2.  Place folders into `datasets/` so the structure looks like this:
+    ```text
+    datasets/
+    ├── D/                  # Clean COCO validation subset
+    ├── D'/                 # Distorted datasets
+    └── temp_processed/     # Pre-processed images (ready for Step 3)
+    ```
+
+### Option 2: Manual Setup
+If you prefer to generate the data yourself:
+
+1.  **Generate Clean Data ($D$):**
+    Run the downloader script to fetch images (Person, Backpack, Chair) from COCO 2017:
+    ```bash
+    python download_coco.py
+    ```
+
+2.  **Prepare Distorted Data ($D'$):**
+    Ensure your distorted datasets are organized as follows:
+    ```text
+    datasets/D'/
+    ├── motion_blur/
+    │   ├── images/
+    │   └── labels/
+    ├── noise/ ...
+    └── spatial_blur/ ...
+    ```
+
+3.  **Generate Processed Data (`temp_processed`):**
+    > **⚠️ Critical Note:** The image processing logic in `step2_optimize.py` is **commented out by default** to save time on repeated runs.
+    >
+    > To generate `datasets/temp_processed/` for the first time, you must:
+    > 1. Open `step2_optimize.py`.
+    > 2. **Uncomment** the code block marked `"Turned off: Datasets Processed"`.
+    > 3. Run Step 2 (see Usage).
 
 ## Usage
-> **Critical: First-Time Setup & Data Generation** By default, the computationally expensive image processing logic is commented out in `step2_optimize.py`. This prevents the pipeline from redundantly re-processing thousands of images on every run.
->
-> **Action Required:** If this is your first run, or if you need to regenerate `the datasets/temp_processed/` folder, you must open `step2_optimize.py` and uncomment the code block marked "Turned off: Datasets Processed" before executing the pipeline.
 
-### Running the Full Pipeline (Recommended)
-To run the complete workflow (Step 1 → Step 2 → Step 3), execute:
+### 1. Run Full Pipeline
+Executes Step 1 (Baseline), Step 2 (Optimization), and Step 3 (Fine-tuning) sequentially.
 ```bash
 python main.py
 ```
 
-### Running Steps Separately
-**Step 1: Baseline**
+### 2. Run Individual Steps
 
-Evaluates the pre-trained YOLO model on the clean dataset (D) and the distorted datasets (D').
+**Step 1: Baseline Evaluation**
+Evaluates YOLO11 on clean ($D$) and distorted ($D'$) datasets.
 ```bash
 python step1_baseline.py
 ```
 
-**Step 2: Optimization**
-
-Performs a grid search over parameters for restoration algorithms.
+**Step 2: Algorithm Optimization**
+Performs grid search for restoration parameters.
+*Remember to uncomment the processing logic if you need to generate processed datasets.*
 ```bash
 python step2_optimize.py
 ```
 
-**Step 3: Fine-tuning**
-
-Compares the performance of the "Best Restoration Algorithm" (from Step 2) against a model "Fine-Tuned" on the distorted data.
+**Step 3: Fine-tuning vs. Restoration**
+Compares the best restoration method against a fine-tuned model.
+*Note: When run standalone, this uses mock config. For real results, run via `main.py`.*
 ```bash
 python step3_finetune.py
 ```
-*Note: When run standalone, this script uses mock configuration data for demonstration. For real results, run via `main.py`*
 
 ## Results
-All artifacts are saved to the results/ directory:
-- **CSVs:** `step1_baseline_results.csv`, `step2_optimization_results.csv`, `step3_finetune_results.csv`
-- **Plots:** Bar charts comparing mAP, Precision, Recall, and F1-Score across different scenarios and classes.
+Artifacts are saved in `results/`:
+*   `step1_baseline_results.csv`
+*   `step2_optimization_results.csv`
+*   `step3_finetune_results.csv`
+*   Performance plots (mAP, Precision, Recall, F1).
