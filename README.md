@@ -85,6 +85,8 @@ If you prefer to generate the data yourself:
     > 1. Open `step2_optimize.py`.
     > 2. **Uncomment** the code block marked `"Turned off: Datasets Processed"`.
     > 3. Run Step 2 (see Usage).
+    >
+    > **Recommendation:** Once `datasets/temp_processed/` is successfully generated, we strongly recommend **commenting this block back out**. This prevents accidental reprocessing and saves significant time in future runs.
 
 ## Usage
 
